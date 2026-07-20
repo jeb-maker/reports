@@ -6,9 +6,36 @@ Plugin JavaScript **vanilla** de signalement utilisateur (bug, aide, suggestion,
 
 ## Installation
 
+### Depuis GitHub Packages
+
+Le package est publié sur le registre npm GitHub (`npm.pkg.github.com`) sous `@jeb-maker/reports`.
+
+1. Créez un [Personal Access Token](https://github.com/settings/tokens) avec le scope `read:packages` (et `repo` si le package est privé).
+2. Dans le projet consommateur, ajoutez un `.npmrc` :
+
+```ini
+@jeb-maker:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=VOTRE_TOKEN
+```
+
+Ou via variable d’environnement : `NODE_AUTH_TOKEN` / `npm login --registry=https://npm.pkg.github.com`.
+
 ```bash
 npm install @jeb-maker/reports
 ```
+
+### Publier (mainteneurs)
+
+```bash
+# local (token avec write:packages)
+echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> ~/.npmrc
+npm run build
+npm publish
+```
+
+Ou créez une **GitHub Release** : le workflow `.github/workflows/publish.yml` publie automatiquement.
+
+### Usage
 
 ```js
 import { Reports } from '@jeb-maker/reports';
