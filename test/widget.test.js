@@ -110,6 +110,39 @@ describe('createUi', () => {
     expect(shadow().querySelector('.rp-backdrop').hidden).toBe(true);
   });
 
+  it('closes via the cancel button', () => {
+    const { ui } = makeUi();
+    ui.open();
+    shadow().querySelector('.rp-cancel').dispatchEvent(new Event('click'));
+    expect(shadow().querySelector('.rp-backdrop').hidden).toBe(true);
+  });
+
+  it('closes via the × button', () => {
+    const { ui } = makeUi();
+    ui.open();
+    shadow().querySelector('.rp-close').dispatchEvent(new Event('click'));
+    expect(shadow().querySelector('.rp-backdrop').hidden).toBe(true);
+  });
+
+  it('closes when clicking the backdrop itself, not the modal', () => {
+    const { ui } = makeUi();
+    ui.open();
+    const backdrop = shadow().querySelector('.rp-backdrop');
+    shadow().querySelector('.rp-modal').dispatchEvent(new Event('click', { bubbles: true }));
+    expect(backdrop.hidden).toBe(false);
+    backdrop.dispatchEvent(new Event('click'));
+    expect(backdrop.hidden).toBe(true);
+  });
+
+  it('actually hides the backdrop when [hidden] (display:flex must not win)', () => {
+    // Regression: `.rp-backdrop { display: flex }` overrode the UA
+    // `[hidden] { display: none }` rule, so the modal could not be closed.
+    const { ui } = makeUi();
+    ui.open();
+    const css = shadow().querySelector('style').textContent;
+    expect(css).toMatch(/\.rp-backdrop\[hidden\]\s*\{\s*display:\s*none/);
+  });
+
   it('shows the auth box when showAuth is set', () => {
     const { ui } = makeUi({
       showAuth: true,

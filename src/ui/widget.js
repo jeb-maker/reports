@@ -30,6 +30,8 @@ const STYLES = `
   display: flex; align-items: flex-end; justify-content: center; padding: 16px;
   animation: rp-fade 180ms ease;
 }
+/* display:flex above beats the UA [hidden] rule — restore it explicitly. */
+.rp-backdrop[hidden] { display: none; }
 @media (min-width: 640px) { .rp-backdrop { align-items: center; } }
 @keyframes rp-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rp-rise {
