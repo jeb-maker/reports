@@ -87,6 +87,10 @@
     </main>
     <script type="module">
       import { Reports } from '../src/index.js';
+      // Minimal alternative:
+      // import { Reports, registerAdapter } from '../src/core.js';
+      // import { sendWebhook } from '../src/adapters/webhook.js';
+      // registerAdapter('webhook', sendWebhook);
 
       console.info('Demo Reports prête');
       console.warn('Exemple avertissement capturé');

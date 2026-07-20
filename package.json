@@ -1,21 +1,60 @@
 {
   "name": "@jeb-maker/reports",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Plugin JavaScript de signalement utilisateur — capture riche, adapters trackers, auth à charge de l'app hôte",
   "type": "module",
   "main": "./dist/reports.umd.cjs",
-  "module": "./dist/reports.esm.js",
+  "module": "./dist/reports.js",
   "unpkg": "./dist/reports.min.js",
   "jsdelivr": "./dist/reports.min.js",
   "exports": {
     ".": {
-      "import": "./dist/reports.esm.js",
+      "import": "./dist/reports.js",
       "require": "./dist/reports.umd.cjs",
-      "default": "./dist/reports.esm.js"
-    }
+      "default": "./dist/reports.js"
+    },
+    "./core": {
+      "import": "./dist/core.js",
+      "default": "./dist/core.js"
+    },
+    "./adapters/webhook": {
+      "import": "./dist/adapters/webhook.js",
+      "default": "./dist/adapters/webhook.js"
+    },
+    "./adapters/slack": {
+      "import": "./dist/adapters/slack.js",
+      "default": "./dist/adapters/slack.js"
+    },
+    "./adapters/github": {
+      "import": "./dist/adapters/github.js",
+      "default": "./dist/adapters/github.js"
+    },
+    "./adapters/jira": {
+      "import": "./dist/adapters/jira.js",
+      "default": "./dist/adapters/jira.js"
+    },
+    "./adapters/redmine": {
+      "import": "./dist/adapters/redmine.js",
+      "default": "./dist/adapters/redmine.js"
+    },
+    "./adapters/gitlab": {
+      "import": "./dist/adapters/gitlab.js",
+      "default": "./dist/adapters/gitlab.js"
+    },
+    "./adapters/linear": {
+      "import": "./dist/adapters/linear.js",
+      "default": "./dist/adapters/linear.js"
+    },
+    "./adapters/azure-devops": {
+      "import": "./dist/adapters/azure-devops.js",
+      "default": "./dist/adapters/azure-devops.js"
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": [
+    "./dist/reports.js",
     "./dist/reports.min.js",
+    "./dist/reports.umd.cjs",
     "./src/index.js"
   ],
   "engines": {
@@ -33,7 +72,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.iife.config.js",
     "preview": "vite preview",
     "demo": "vite --open /demo/index.html",
     "prepublishOnly": "npm run build",

@@ -6,6 +6,7 @@ import { sendRedmine } from './redmine.js';
 import { sendGitLab } from './gitlab.js';
 import { sendLinear } from './linear.js';
 import { sendAzureDevOps } from './azure-devops.js';
+import { registerAdapter, dispatch, getAdapter, listAdapters } from './registry.js';
 
 const BUILTIN = {
   webhook: sendWebhook,
@@ -18,23 +19,25 @@ const BUILTIN = {
   azureDevOps: sendAzureDevOps,
 };
 
-/**
- * @param {import('../index.js').ReportPayload} report
- * @param {Record<string, unknown>} config
- */
-export async function dispatch(report, config) {
-  const adapter = config.adapter;
-
-  if (typeof adapter === 'function') {
-    return adapter(report, config);
+/** Register every built-in adapter (used by the full package entry). */
+export function registerAllAdapters() {
+  for (const [name, fn] of Object.entries(BUILTIN)) {
+    registerAdapter(name, fn);
   }
-
-  const name = typeof adapter === 'string' ? adapter : 'webhook';
-  const fn = BUILTIN[name];
-  if (!fn) {
-    throw new Error(`Unknown adapter: ${name}. Known: ${Object.keys(BUILTIN).join(', ')}`);
-  }
-  return fn(report, config);
 }
 
-export { BUILTIN as adapters };
+export {
+  sendWebhook,
+  sendSlack,
+  sendGitHub,
+  sendJira,
+  sendRedmine,
+  sendGitLab,
+  sendLinear,
+  sendAzureDevOps,
+  registerAdapter,
+  dispatch,
+  getAdapter,
+  listAdapters,
+  BUILTIN as adapters,
+};
