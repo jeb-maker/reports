@@ -1,0 +1,60 @@
+{
+  "name": "@jeb-maker/reports",
+  "version": "0.1.0",
+  "description": "Plugin JavaScript de signalement utilisateur — capture riche, adapters trackers, auth à charge de l'app hôte",
+  "type": "module",
+  "main": "./dist/reports.umd.cjs",
+  "module": "./dist/reports.esm.js",
+  "unpkg": "./dist/reports.min.js",
+  "jsdelivr": "./dist/reports.min.js",
+  "exports": {
+    ".": {
+      "import": "./dist/reports.esm.js",
+      "require": "./dist/reports.umd.cjs",
+      "default": "./dist/reports.esm.js"
+    }
+  },
+  "sideEffects": [
+    "./dist/reports.min.js",
+    "./src/index.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "demo": "vite --open /demo/index.html",
+    "prepublishOnly": "npm run build",
+    "publish:github": "npm publish"
+  },
+  "keywords": [
+    "feedback",
+    "bug-report",
+    "widget",
+    "jira",
+    "github",
+    "slack",
+    "redmine"
+  ],
+  "author": "J-Emmanuel Babarit",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeb-maker/reports.git"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}
