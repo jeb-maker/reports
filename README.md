@@ -1,8 +1,8 @@
 # @jeb-maker/reports
 
-Plugin JavaScript **vanilla** de signalement utilisateur (bug, aide, suggestion, question). Intégrable sur n’importe quel site via `<script>` ou npm. Capture un contexte diagnostic riche et envoie le rapport via un adaptateur configurable.
+Plugin JavaScript **vanilla** de signalement utilisateur (bug, aide, suggestion, question). Intégrable via npm ou `<script>`. Capture un contexte diagnostic riche et envoie via un adaptateur configurable.
 
-**Projet 100 % JS** — pas de backend ni de proxy dans ce dépôt. L’authentification est à la charge de l’application hôte.
+**Projet 100 % JS** — pas de backend dans ce dépôt. L’auth est à la charge de l’application hôte.
 
 ## Installation
 
@@ -10,49 +10,55 @@ Plugin JavaScript **vanilla** de signalement utilisateur (bug, aide, suggestion,
 npm install @jeb-maker/reports
 ```
 
-Ou script tag après build :
-
-```html
-<script src="./dist/reports.min.js"></script>
-<script>
-  Reports.init({ /* config */ });
-</script>
-```
-
-## Démarrage rapide
-
 ```js
-import Reports from '@jeb-maker/reports';
+import { Reports } from '@jeb-maker/reports';
+// ou: import Reports from '@jeb-maker/reports';
 
 Reports.init({
   adapter: 'webhook',
   webhook: {
     url: '/api/feedback',
-    credentials: 'include', // session cookie de votre app
+    credentials: 'same-origin', // cookies same-origin ; 'include' seulement si vous le voulez explicitement
   },
   metadata: () => ({ userId: window.currentUser?.id, appVersion: '1.2.0' }),
 });
 ```
 
-API : `Reports.open()` · `Reports.close()` · `Reports.connect()` · `Reports.logout()` · `Reports.destroy()` · `Reports.submit(form)`.
+Script tag (après `npm run build`) :
 
-## Chemins d’auth (trackers)
+```html
+<script src="./dist/reports.min.js"></script>
+<script>
+  Reports.init({ adapter: 'webhook', webhook: { url: '/api/feedback' } });
+</script>
+```
+
+## API
+
+| Méthode | Rôle |
+|---------|------|
+| `Reports.init(config)` | Monte le widget |
+| `Reports.open()` / `close()` | Ouvre / ferme le formulaire |
+| `Reports.connect()` | OAuth PKCE (si `auth: 'oauth'`) **ou** appelle `getAccessToken()` s’il est fourni |
+| `Reports.logout()` | Efface le token mémoire |
+| `Reports.destroy({ clearAuth? })` | Démonte ; n’efface le token que si `clearAuth: true` |
+| `Reports.submit(payload)` | Envoi programmatique — objet `{ type, title, message, email?, consentScreenshot? }` (pas un `<form>`) |
+
+## Auth (trackers)
 
 | Mode | Usage |
 |------|--------|
-| `auth: 'url'` | `POST` vers une URL de **votre** app (recommandé). Sécurisez avec cookie session / JWT. |
-| `auth: 'token'` | Appels API tracker directs avec `getAccessToken()` (token **utilisateur** runtime — jamais de string figée). |
-| `auth: 'oauth'` | PKCE navigateur quand le tracker le permet (ex. **Jira Data Center**, GitLab). |
+| `auth: 'url'` | `POST` vers **votre** app (`credentials` défaut `same-origin`). Ne forward **pas** le Bearer tracker sauf `forwardBearer: true`. |
+| `auth: 'token'` | API tracker directe via `getAccessToken()` (runtime, jamais de string figée). |
+| `auth: 'oauth'` | PKCE navigateur : **Jira Data Center**, **GitLab**. Pas GitHub (secret requis). Pas Jira Cloud sans échange côté app. |
 
-La lib **refuse** `clientSecret` / PAT hardcodés dans `init()`.
+La lib **refuse** `clientSecret` / PAT hardcodés dans `init()`. Tokens OAuth en **mémoire uniquement** (pas de `refresh_token` persisté).
 
-### Jira Cloud (login utilisateur → token utilisateur)
+### Jira Cloud (login user → token user)
 
-Oui : OAuth 3LO donne un token **au nom de l’utilisateur**.  
-Non : échange `code → token` sans `client_secret` (pas de PKCE public Cloud).
+Oui via OAuth 3LO. L’échange `code→token` nécessite le `client_secret` **côté app hôte**, puis :
 
 ```js
-// L’app hôte échange le code (secret serveur), puis :
 Reports.init({
   adapter: 'jira',
   jira: {
@@ -60,26 +66,13 @@ Reports.init({
     cloudId: 'YOUR_CLOUD_ID',
     getAccessToken: () => myApp.getJiraAccessToken(),
     projectKey: 'SUP',
-    issueType: 'Bug',
   },
 });
 ```
 
-Ou forward via votre API :
+Ou `auth: 'url'` vers `/api/feedback/jira`.
 
-```js
-Reports.init({
-  adapter: 'jira',
-  jira: {
-    auth: 'url',
-    url: '/api/feedback/jira',
-    credentials: 'include',
-    projectKey: 'SUP',
-  },
-});
-```
-
-### Jira Data Center (PKCE navigateur)
+### Jira Data Center (PKCE)
 
 ```js
 Reports.init({
@@ -89,7 +82,7 @@ Reports.init({
     variant: 'datacenter',
     baseUrl: 'https://jira.example.tld',
     clientId: '…',
-    redirectUri: 'https://app.example/oauth/callback.html', // voir examples/oauth-callback.html
+    redirectUri: 'https://app.example/oauth/callback.html', // examples/oauth-callback.html
     projectKey: 'SUP',
   },
 });
@@ -97,72 +90,40 @@ Reports.init({
 
 ## Adaptateurs
 
-| Id | Rôle |
-|----|------|
-| `webhook` | POST JSON du rapport brut |
-| `slack` | Incoming webhook — résumé texte/blocks (**pas** d’image base64) |
-| `github` | Issue GitHub (token ou url) |
-| `jira` | Issue Jira Cloud / DC |
-| `redmine` | Issue Redmine |
-| `gitlab` | Issue GitLab |
-| `linear` | Issue Linear (GraphQL) |
-| `azureDevOps` | Work item Azure DevOps |
-| `function` | `(report) => Promise` |
+`webhook` · `slack` · `github` · `jira` · `redmine` · `gitlab` · `linear` · `azureDevOps` · `function`
 
-Exemple Slack :
+- **Slack** : texte/blocks seulement (pas d’image base64).
+- **Redmine** : header `X-Redmine-API-Key` (`authScheme: 'redmine'`).
+- **Azure DevOps PAT** : `usePat: true` → Basic auth.
+- **Linear API key** : `useApiKey: true` → `Authorization` sans Bearer.
+- **Screenshot** : `getDisplayMedia` ; html2canvas seulement si vous fournissez `screenshot.html2canvas` ou `window.html2canvas` (pas de CDN tiers).
 
-```js
-Reports.init({
-  adapter: 'slack',
-  slack: { webhookUrl: 'https://hooks.slack.com/services/…' },
-});
-```
+## Rapport (`schemaVersion: 1`)
 
-Exemple callback custom :
-
-```js
-Reports.init({
-  adapter: async (report) => {
-    await myApi.send(report);
-  },
-});
-```
-
-## Contenu du rapport (`schemaVersion: 1`)
-
-- Identité : `id`, `createdAt`, `type`, `title`, `message`, `email?`
-- Page / navigateur / viewport / timing
-- `console[]` (redacté), `errors[]`, `network[]` (échecs seulement, sans headers secrets)
-- `screenshot: { status, mime?, dataUrl?, bytes?, method? }` — `getDisplayMedia` puis fallback html2canvas ; consentement UI
-- `metadata`, `actions: []` (réservé post-V1)
-
-Pas de cookies / localStorage automatiques.
+Page (URL redactée), navigateur, viewport, timing, console, erreurs, réseau (échecs), screenshot, metadata, `actions: []` (réservé post-V1).
 
 ## CORS
 
-Si l’API du tracker bloque le navigateur, utilisez `auth: 'url'` vers **votre** endpoint same-origin. Jira Cloud autorise CORS sur `api.atlassian.com` **avec** un Bearer.
+Si l’API tracker bloque le navigateur → `auth: 'url'` same-origin. Jira Cloud : CORS OK sur `api.atlassian.com` avec Bearer.
 
-## Démo locale
+## Démo
 
 ```bash
 npm install
 npm run demo
-# ou
-npm run build
 ```
 
-## Checklist intégrateur
+## Checklist
 
-1. Ne jamais mettre `clientSecret` / PAT orga dans le JS public  
-2. Sécuriser l’URL de réception (auth session, rate-limit)  
-3. Enregistrer l’app OAuth chez le tracker si besoin + `redirectUri`  
-4. Fournir `metadata()` (userId, version, tenant…)  
-5. Tester le consentement screenshot sur mobile / desktop  
+1. Pas de secret dans le JS public  
+2. Sécuriser l’endpoint de réception (auth, rate-limit)  
+3. OAuth app + `redirectUri` same-origin si besoin  
+4. `metadata()` pour userId / version  
+5. Tester screenshot + consentement  
 
-## Post-V1 (prévu)
+## Post-V1
 
-- Suite d’actions (breadcrumb clics / navigation)  
-- Wrappers frameworks (React, Vue, Angular, Svelte, Web Component)  
+Suite d’actions · wrappers React / Vue / Angular / Svelte / Web Component
 
 ## Licence
 

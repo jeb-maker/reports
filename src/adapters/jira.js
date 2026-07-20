@@ -1,4 +1,4 @@
-import { formatContextMarkdown, typeToIssueKind } from './format-context.js';
+import { formatContextMarkdown, markdownToSimpleAdf, typeToIssueKind, sliceChars } from './format-context.js';
 import { sendViaAuth } from './shared.js';
 
 const TYPE_TO_JIRA = {
@@ -9,7 +9,7 @@ const TYPE_TO_JIRA = {
 };
 
 /**
- * @param {import('../index.js').ReportPayload} report
+ * @param {object} report
  * @param {Record<string, unknown>} config
  */
 export async function sendJira(report, config) {
@@ -19,28 +19,20 @@ export async function sendJira(report, config) {
     throw new Error('[Reports] jira.clientSecret is forbidden in the browser. Use getAccessToken or auth: "url".');
   }
 
+  if (!cfg.projectKey && cfg.auth !== 'url' && !cfg.url) {
+    throw new Error('jira.projectKey is required');
+  }
+
   const issueType = cfg.issueType || TYPE_TO_JIRA[report.type] || 'Task';
   const descriptionText = formatContextMarkdown(report);
 
-  // ADF-ish minimal for Cloud; plain string for DC url forward
   const fields = {
     project: { key: cfg.projectKey },
-    summary: `[${report.type}] ${report.title}`.slice(0, 240),
+    summary: sliceChars(`[${report.type}] ${report.title}`, 240),
     issuetype: { name: issueType },
     labels: cfg.labels || ['user-report'],
     description:
-      cfg.variant === 'datacenter'
-        ? descriptionText
-        : {
-            type: 'doc',
-            version: 1,
-            content: [
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: descriptionText.slice(0, 32000) }],
-              },
-            ],
-          },
+      cfg.variant === 'datacenter' ? descriptionText : markdownToSimpleAdf(descriptionText),
   };
 
   const payload = { fields, report, kind: typeToIssueKind(report.type) };
@@ -51,16 +43,17 @@ export async function sendJira(report, config) {
 
   if (cfg.variant === 'datacenter') {
     const base = (cfg.baseUrl || '').replace(/\/$/, '');
-    if (!base && cfg.auth !== 'url') throw new Error('jira.baseUrl required for Data Center');
+    if (!base) throw new Error('jira.baseUrl required for Data Center');
     return sendViaAuth(cfg, { fields }, {
       apiUrl: `${base}/rest/api/2/issue`,
+      provider: 'jiraDatacenter',
     });
   }
 
-  // Jira Cloud
   const cloudId = cfg.cloudId;
   if (!cloudId) throw new Error('jira.cloudId is required for Cloud token mode');
   return sendViaAuth(cfg, { fields }, {
     apiUrl: `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`,
+    provider: 'jiraCloud',
   });
 }

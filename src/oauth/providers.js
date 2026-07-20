@@ -1,13 +1,6 @@
 import { createPkcePair, openOAuthPopup, randomString, saveToken, loadToken, clearToken } from './pkce.js';
 
-/**
- * Provider configs for OAuth PKCE where supported.
- */
-
 export const providers = {
-  /**
-   * Jira Data Center / Server OAuth2 provider API.
-   */
   jiraDatacenter: {
     id: 'jira-datacenter',
     async buildAuthorizeUrl(config, { challenge, state }) {
@@ -21,7 +14,7 @@ export const providers = {
         code_challenge: challenge,
         code_challenge_method: 'S256',
       });
-      return `${base}/rest/oauth2/latest/authorize?${params}`;
+      return `${base}/rest/oauth2/latest/authorize?${params.toString()}`;
     },
     async exchangeCode(config, { code, verifier }) {
       const base = config.baseUrl.replace(/\/$/, '');
@@ -37,29 +30,11 @@ export const providers = {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
       });
-      if (!res.ok) throw new Error(`Jira DC token exchange failed: ${res.status}`);
+      if (!res.ok) {
+        const detail = (await res.text().catch(() => '')).slice(0, 300);
+        throw new Error(`Jira DC token exchange failed: ${res.status} ${detail}`);
+      }
       return res.json();
-    },
-  },
-
-  github: {
-    id: 'github',
-    async buildAuthorizeUrl(config, { challenge, state }) {
-      // GitHub supports PKCE for OAuth Apps in recent flows; scopes for issues
-      const params = new URLSearchParams({
-        client_id: config.clientId,
-        redirect_uri: config.redirectUri,
-        scope: (config.scopes || ['repo']).join(' '),
-        state,
-        code_challenge: challenge,
-        code_challenge_method: 'S256',
-      });
-      return `https://github.com/login/oauth/authorize?${params}`;
-    },
-    async exchangeCode() {
-      throw new Error(
-        'GitHub token exchange requires a host-app endpoint (client secret). Use getAccessToken() or auth: "url".',
-      );
     },
   },
 
@@ -76,7 +51,7 @@ export const providers = {
         code_challenge: challenge,
         code_challenge_method: 'S256',
       });
-      return `${base}/oauth/authorize?${params}`;
+      return `${base}/oauth/authorize?${params.toString()}`;
     },
     async exchangeCode(config, { code, verifier }) {
       const base = (config.baseUrl || 'https://gitlab.com').replace(/\/$/, '');
@@ -92,14 +67,16 @@ export const providers = {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
       });
-      if (!res.ok) throw new Error(`GitLab token exchange failed: ${res.status}`);
+      if (!res.ok) {
+        const detail = (await res.text().catch(() => '')).slice(0, 300);
+        throw new Error(`GitLab token exchange failed: ${res.status} ${detail}`);
+      }
       return res.json();
     },
   },
 };
 
 /**
- * Start OAuth connect for a tracker config with auth: 'oauth'.
  * @param {string} providerKey
  * @param {Record<string, unknown>} config
  */
@@ -108,26 +85,43 @@ export async function connectOAuth(providerKey, config) {
     throw new Error('[Reports] clientSecret must not be used in the browser bundle.');
   }
 
+  if (providerKey === 'github') {
+    throw new Error(
+      'GitHub OAuth Apps require a client secret for token exchange. Use auth: "url" (host endpoint) or getAccessToken().',
+    );
+  }
+
   const provider = providers[providerKey];
   if (!provider) throw new Error(`Unknown OAuth provider: ${providerKey}`);
 
   const { verifier, challenge } = await createPkcePair();
   const state = randomString(32);
-  sessionStorage.setItem('reports.oauth.verifier', verifier);
-  sessionStorage.setItem('reports.oauth.state', state);
-  sessionStorage.setItem('reports.oauth.provider', providerKey);
 
-  const authorizeUrl = await provider.buildAuthorizeUrl(config, { challenge, state });
-  const { code, state: returnedState } = await openOAuthPopup({ authorizeUrl });
+  try {
+    sessionStorage.setItem('reports.oauth.verifier', verifier);
+    sessionStorage.setItem('reports.oauth.state', state);
+    sessionStorage.setItem('reports.oauth.provider', providerKey);
 
-  if (returnedState !== state) throw new Error('OAuth state mismatch');
+    const authorizeUrl = await provider.buildAuthorizeUrl(config, { challenge, state });
+    const { code, state: returnedState } = await openOAuthPopup({ authorizeUrl });
 
-  const tokenResponse = await provider.exchangeCode(config, { code, verifier });
-  const accessToken = tokenResponse.access_token;
-  if (!accessToken) throw new Error('No access_token in OAuth response');
+    if (returnedState !== state) throw new Error('OAuth state mismatch');
 
-  saveToken(accessToken, { provider: providerKey, raw: tokenResponse });
-  return accessToken;
+    const tokenResponse = await provider.exchangeCode(config, { code, verifier });
+    const accessToken = tokenResponse.access_token;
+    if (!accessToken) throw new Error('No access_token in OAuth response');
+
+    saveToken(accessToken, { provider: providerKey, raw: tokenResponse });
+    return accessToken;
+  } finally {
+    try {
+      sessionStorage.removeItem('reports.oauth.verifier');
+      sessionStorage.removeItem('reports.oauth.state');
+      sessionStorage.removeItem('reports.oauth.provider');
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export { loadToken, clearToken, saveToken };

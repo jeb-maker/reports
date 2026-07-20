@@ -1,39 +1,46 @@
 import { postJson } from '../transport/http.js';
-import { formatContextMarkdown } from './format-context.js';
+import { formatContextMarkdown, sliceChars } from './format-context.js';
 
 /**
  * Slack incoming webhook — text/blocks only, no base64 images.
- * @param {import('../index.js').ReportPayload} report
+ * @param {object} report
  * @param {Record<string, unknown>} config
  */
 export async function sendSlack(report, config) {
-  const cfg = config.slack || config;
+  const cfg = config.slack || {};
   const url = cfg.webhookUrl || cfg.url;
   if (!url) throw new Error('slack.webhookUrl is required');
 
+  const title = sliceChars(`[${report.type}] ${report.title}`, 150);
+  const bytesNote =
+    report.screenshot?.bytes != null ? `${report.screenshot.bytes} bytes` : 'size unknown';
+
   const screenshotNote =
     report.screenshot?.status === 'captured'
-      ? `Screenshot: present in full webhook payload only (${report.screenshot.bytes} bytes) — omitted here`
+      ? `Screenshot: present in full webhook/raw payload only (${bytesNote}) — omitted here`
       : `Screenshot: ${report.screenshot?.status || 'none'}`;
 
-  const text = [
-    `*[${report.type}] ${report.title}*`,
-    report.message,
-    `URL: ${report.page?.url || '—'}`,
-    `UA: ${report.browser?.userAgent || '—'}`,
-    screenshotNote,
-  ].join('\n');
+  const text = sliceChars(
+    [
+      `*${title}*`,
+      report.message || '',
+      `URL: ${report.page?.url || '—'}`,
+      `UA: ${report.browser?.userAgent || '—'}`,
+      screenshotNote,
+    ].join('\n'),
+    2900,
+  );
 
   const body = {
-    text: `[${report.type}] ${report.title}`,
+    text: title,
     blocks: [
       {
         type: 'header',
-        text: { type: 'plain_text', text: `[${report.type}] ${report.title}`.slice(0, 150) },
+        text: { type: 'plain_text', text: title },
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: text.slice(0, 2900) },
+        text: { type: 'mrkdwn', text },
       },
       {
         type: 'context',
@@ -45,12 +52,11 @@ export async function sendSlack(report, config) {
         ],
       },
     ],
-    // Condensed context for humans; full markdown available if needed by bots
     attachments: [
       {
         color: report.type === 'bug' ? '#E74C3C' : '#0B6E4F',
-        text: formatContextMarkdown({ ...report, screenshot: { status: report.screenshot?.status } }).slice(
-          0,
+        text: sliceChars(
+          formatContextMarkdown({ ...report, screenshot: { status: report.screenshot?.status } }),
           2900,
         ),
       },

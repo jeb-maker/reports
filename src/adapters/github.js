@@ -1,13 +1,13 @@
-import { formatContextMarkdown } from './format-context.js';
+import { formatContextMarkdown, sliceChars } from './format-context.js';
 import { sendViaAuth } from './shared.js';
 
 /**
- * @param {import('../index.js').ReportPayload} report
+ * @param {object} report
  * @param {Record<string, unknown>} config
  */
 export async function sendGitHub(report, config) {
   const cfg = config.github || {};
-  const title = `[${report.type}] ${report.title}`.slice(0, 240);
+  const title = sliceChars(`[${report.type}] ${report.title}`, 240);
   const body = {
     title,
     body: formatContextMarkdown(report),
@@ -22,7 +22,19 @@ export async function sendGitHub(report, config) {
   const repo = cfg.repo;
   if (!owner || !repo) throw new Error('github.owner and github.repo are required for token/oauth');
 
-  return sendViaAuth(cfg, body, {
-    apiUrl: `https://api.github.com/repos/${owner}/${repo}/issues`,
-  });
+  return sendViaAuth(
+    {
+      ...cfg,
+      headers: async () => ({
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(typeof cfg.headers === 'function' ? await cfg.headers() : cfg.headers || {}),
+      }),
+    },
+    body,
+    {
+      apiUrl: `https://api.github.com/repos/${owner}/${repo}/issues`,
+      provider: 'github',
+    },
+  );
 }

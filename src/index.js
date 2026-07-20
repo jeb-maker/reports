@@ -14,13 +14,12 @@ import { connectOAuth, clearToken, loadToken } from './oauth/providers.js';
 /** @typedef {object} ReportPayload */
 
 let state = null;
+let epoch = 0;
 
 /**
  * @param {Record<string, unknown>} config
  */
 export function init(config = {}) {
-  if (state) destroy();
-
   assertNoHardcodedSecrets(config);
 
   const cfg = {
@@ -32,41 +31,55 @@ export function init(config = {}) {
     consoleCapture: true,
     consoleBufferSize: 100,
     networkCapture: true,
+    errorCapture: true,
+    loadGoogleFonts: false,
     ...config,
   };
 
   const i18n = resolveI18n(cfg.i18n || cfg.labels);
+  const showAuth = needsAuthUi(cfg);
+  const myEpoch = ++epoch;
 
+  // Prepare new collectors (not started yet)
   const consoleCap = createConsoleCapture({
     size: cfg.consoleBufferSize,
     redact: redactString,
   });
-  const errorCap = createErrorCapture();
+  const errorCap = createErrorCapture({
+    size: cfg.errorBufferSize || 50,
+    redact: redactString,
+  });
   const networkCap = createNetworkCapture();
-
-  if (cfg.consoleCapture !== false) consoleCap.start();
-  errorCap.start();
-  if (cfg.networkCapture !== false) networkCap.start();
-
-  const showAuth = needsAuthUi(cfg);
 
   const ui = createUi({
     i18n,
     theme: cfg.theme,
     types: cfg.types,
     showAuth,
+    loadGoogleFonts: cfg.loadGoogleFonts === true,
     getAuthState: () => {
       const tok = loadToken();
       return { connected: Boolean(tok?.token), label: tok?.meta?.provider };
     },
     onConnect: () => connect(cfg),
     onLogout: () => logout(),
-    onSubmit: (form) => submitReport(form, cfg, { consoleCap, errorCap, networkCap, ui }),
+    onSubmit: (form) => submitReport(form, cfg, { consoleCap, errorCap, networkCap, ui, epoch: myEpoch }),
   });
 
-  ui.mount();
+  // Stop previous wrappers before installing new ones (avoids stacking)
+  if (state) {
+    state.consoleCap.stop();
+    state.errorCap.stop();
+    state.networkCap.stop();
+    state.ui.destroy();
+  }
 
-  state = { cfg, ui, consoleCap, errorCap, networkCap };
+  if (cfg.consoleCapture !== false) consoleCap.start();
+  if (cfg.errorCapture !== false) errorCap.start();
+  if (cfg.networkCapture !== false) networkCap.start();
+
+  state = { cfg, ui, consoleCap, errorCap, networkCap, epoch: myEpoch };
+  ui.mount();
   return Reports;
 }
 
@@ -109,6 +122,11 @@ export async function connect(cfg) {
     }
     providerKey = 'jiraDatacenter';
   }
+  if (name === 'github') {
+    throw new Error(
+      'GitHub OAuth requires a host endpoint (client secret). Use auth: "url" or getAccessToken().',
+    );
+  }
 
   return connectOAuth(providerKey, block);
 }
@@ -125,43 +143,70 @@ export function close() {
   ensureReady().ui.close();
 }
 
-export function destroy() {
+/**
+ * @param {{ clearAuth?: boolean }} [opts]
+ */
+export function destroy(opts = {}) {
   if (!state) return;
   state.consoleCap.stop();
   state.errorCap.stop();
   state.networkCap.stop();
   state.ui.destroy();
-  clearToken();
+  if (opts.clearAuth) clearToken();
   state = null;
 }
 
 /**
- * Build + send a report programmatically.
  * @param {object} form
  */
 export async function submit(form) {
   const s = ensureReady();
-  return submitReport(form, s.cfg, s);
+  const payload =
+    typeof HTMLFormElement !== 'undefined' && form instanceof HTMLFormElement
+      ? Object.fromEntries(new FormData(form))
+      : form;
+  return submitReport(payload, s.cfg, { ...s, epoch: s.epoch });
 }
 
 async function submitReport(form, cfg, caps) {
-  const context = collectContext();
+  const startedEpoch = caps.epoch;
+  const isStale = () => !state || state.epoch !== startedEpoch;
+
   let metadata = {};
   try {
-    metadata = typeof cfg.metadata === 'function' ? await cfg.metadata() : cfg.metadata || {};
-  } catch {
-    metadata = { error: 'metadata() failed' };
+    const metaPromise =
+      typeof cfg.metadata === 'function' ? Promise.resolve(cfg.metadata()) : Promise.resolve(cfg.metadata || {});
+    metadata = await Promise.race([
+      metaPromise,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('metadata_timeout')), 3000)),
+    ]);
+  } catch (err) {
+    metadata = { error: err?.message === 'metadata_timeout' ? 'metadata_timeout' : 'metadata() failed' };
   }
+
+  if (metadata && typeof metadata === 'object') {
+    try {
+      metadata = JSON.parse(redactString(JSON.stringify(metadata), 8000));
+    } catch {
+      metadata = { error: 'metadata_redact_failed' };
+    }
+  }
+
+  if (isStale()) throw new Error('Submit aborted (widget destroyed)');
+
+  const context = collectContext();
+  const id =
+    globalThis.crypto?.randomUUID?.() || `rp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
   /** @type {ReportPayload} */
   const report = {
     schemaVersion: 1,
-    id: crypto.randomUUID?.() || `rp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    id,
     createdAt: new Date().toISOString(),
     type: form.type || 'bug',
-    title: form.title || '',
-    message: form.message || '',
-    email: form.email,
+    title: redactString(form.title || '', 500),
+    message: redactString(form.message || '', 5000),
+    email: form.email ? String(form.email).trim() : undefined,
     consentScreenshot: Boolean(form.consentScreenshot),
     ...context,
     console: caps.consoleCap.snapshot(),
@@ -178,12 +223,15 @@ async function submitReport(form, cfg, caps) {
   const wantsShot = shotEnabled && (!needsConsent || form.consentScreenshot);
 
   if (wantsShot) {
+    if (isStale()) throw new Error('Submit aborted (widget destroyed)');
     report.screenshot = await captureScreenshot({
       maxBytes: cfg.screenshot?.maxBytes || 400_000,
       ignoreRoot: caps.ui?.root || null,
+      html2canvas: cfg.screenshot?.html2canvas || null,
     });
   }
 
+  if (isStale()) throw new Error('Submit aborted (widget destroyed)');
   return dispatch(report, cfg);
 }
 
@@ -202,7 +250,9 @@ export const Reports = {
   submit,
 };
 
-// UMD / IIFE global
-if (typeof window !== 'undefined') {
+export default Reports;
+
+// Browser global only when not already set by IIFE/UMD wrapper
+if (typeof window !== 'undefined' && !window.Reports) {
   window.Reports = Reports;
 }

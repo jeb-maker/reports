@@ -6,27 +6,6 @@
   </head>
   <body>
     <p>Finalisation de la connexion…</p>
-    <script>
-      (function () {
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
-        const state = params.get('state');
-        const error = params.get('error') || params.get('error_description');
-        const payload = {
-          type: 'reports-oauth-callback',
-          code,
-          state,
-          error: error || (!code ? 'missing_code' : null),
-        };
-        if (window.opener) {
-          window.opener.postMessage(payload, window.location.origin);
-          window.close();
-        } else {
-          document.body.textContent = error
-            ? 'OAuth error: ' + error
-            : 'Code reçu. Vous pouvez fermer cette fenêtre.';
-        }
-      })();
-    </script>
+    <script src="./oauth-callback.js"></script>
   </body>
 </html>

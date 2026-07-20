@@ -1,14 +1,14 @@
-import { formatContextMarkdown } from './format-context.js';
+import { formatContextMarkdown, sliceChars } from './format-context.js';
 import { sendViaAuth } from './shared.js';
 
 /**
- * @param {import('../index.js').ReportPayload} report
+ * @param {object} report
  * @param {Record<string, unknown>} config
  */
 export async function sendRedmine(report, config) {
-  const cfg = config.redmine || {};
+  const cfg = { ...(config.redmine || {}), authScheme: (config.redmine || {}).authScheme || 'redmine' };
   const issue = {
-    subject: `[${report.type}] ${report.title}`.slice(0, 240),
+    subject: sliceChars(`[${report.type}] ${report.title}`, 240),
     description: formatContextMarkdown(report),
     project_id: cfg.projectId,
     tracker_id: cfg.trackerId,
@@ -23,5 +23,5 @@ export async function sendRedmine(report, config) {
 
   const base = (cfg.baseUrl || '').replace(/\/$/, '');
   if (!base) throw new Error('redmine.baseUrl or redmine.url required');
-  return sendViaAuth(cfg, payload, { apiUrl: `${base}/issues.json` });
+  return sendViaAuth(cfg, { issue }, { apiUrl: `${base}/issues.json`, provider: 'redmine' });
 }

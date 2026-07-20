@@ -1,12 +1,17 @@
-import { formatContextMarkdown } from './format-context.js';
+import { formatContextMarkdown, sliceChars } from './format-context.js';
 import { sendViaAuth } from './shared.js';
 
 /**
- * @param {import('../index.js').ReportPayload} report
+ * @param {object} report
  * @param {Record<string, unknown>} config
  */
 export async function sendLinear(report, config) {
-  const cfg = config.linear || {};
+  const cfg = { ...(config.linear || {}) };
+  // Personal API keys: Authorization without Bearer. OAuth tokens: Bearer.
+  if (!cfg.authScheme) {
+    cfg.authScheme = cfg.useApiKey === true ? 'apiKey' : 'bearer';
+  }
+
   const mutation = {
     query: `mutation CreateIssue($input: IssueCreateInput!) {
       issueCreate(input: $input) {
@@ -17,7 +22,7 @@ export async function sendLinear(report, config) {
     variables: {
       input: {
         teamId: cfg.teamId,
-        title: `[${report.type}] ${report.title}`.slice(0, 240),
+        title: sliceChars(`[${report.type}] ${report.title}`, 240),
         description: formatContextMarkdown(report),
         labelIds: cfg.labelIds || undefined,
       },
@@ -25,8 +30,8 @@ export async function sendLinear(report, config) {
   };
 
   if (cfg.auth === 'url' || cfg.url) {
-    return sendViaAuth({ ...cfg, auth: cfg.auth || 'url' }, { ...mutation, report });
+    return sendViaAuth({ ...cfg, auth: cfg.auth || 'url' }, { graphql: mutation, report });
   }
 
-  return sendViaAuth(cfg, mutation, { apiUrl: 'https://api.linear.app/graphql' });
+  return sendViaAuth(cfg, mutation, { apiUrl: 'https://api.linear.app/graphql', provider: 'linear' });
 }

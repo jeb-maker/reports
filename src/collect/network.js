@@ -9,8 +9,11 @@ export function createNetworkCapture({ size = 40 } = {}) {
   const buffer = [];
   let active = false;
   let originalFetch = null;
+  let wrappedFetch = null;
   let originalOpen = null;
   let originalSend = null;
+  let wrappedOpen = null;
+  let wrappedSend = null;
 
   function push(entry) {
     buffer.push(entry);
@@ -22,13 +25,17 @@ export function createNetworkCapture({ size = 40 } = {}) {
     active = true;
 
     if (typeof window.fetch === 'function') {
-      originalFetch = window.fetch.bind(window);
-      window.fetch = async (input, init = {}) => {
-        const method = (init.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
-        const url = redactUrl(typeof input === 'string' ? input : input.url || String(input));
+      originalFetch = window.fetch;
+      wrappedFetch = async function reportsFetch(input, init = {}) {
+        const method = (init.method || (typeof input === 'object' && input && input.method) || 'GET').toUpperCase();
+        let rawUrl = '';
+        if (typeof input === 'string') rawUrl = input;
+        else if (input && typeof input === 'object' && typeof input.url === 'string') rawUrl = input.url;
+        else rawUrl = String(input);
+        const url = redactUrl(rawUrl);
         const started = performance.now();
         try {
-          const response = await originalFetch(input, init);
+          const response = await originalFetch.call(window, input, init);
           if (response.status >= 400) {
             push({
               method,
@@ -50,47 +57,61 @@ export function createNetworkCapture({ size = 40 } = {}) {
           throw err;
         }
       };
+      window.fetch = wrappedFetch;
     }
 
     if (typeof XMLHttpRequest !== 'undefined') {
       originalOpen = XMLHttpRequest.prototype.open;
       originalSend = XMLHttpRequest.prototype.send;
 
-      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      wrappedOpen = function reportsXhrOpen(method, url, ...rest) {
         this.__rpMethod = String(method || 'GET').toUpperCase();
         this.__rpUrl = redactUrl(String(url));
         this.__rpStart = 0;
+        if (!this.__rpLoadendBound) {
+          this.__rpLoadendBound = true;
+          this.addEventListener('loadend', () => {
+            const status = this.status;
+            if (status === 0 || status >= 400) {
+              push({
+                method: this.__rpMethod || 'GET',
+                url: this.__rpUrl || '',
+                status: status || undefined,
+                error: status === 0 ? 'network_error' : undefined,
+                durationMs: this.__rpStart ? Math.round(performance.now() - this.__rpStart) : undefined,
+                ts: new Date().toISOString(),
+              });
+            }
+          });
+        }
         return originalOpen.call(this, method, url, ...rest);
       };
 
-      XMLHttpRequest.prototype.send = function (...args) {
+      wrappedSend = function reportsXhrSend(...args) {
         this.__rpStart = performance.now();
-        this.addEventListener('loadend', () => {
-          const status = this.status;
-          if (status === 0 || status >= 400) {
-            push({
-              method: this.__rpMethod || 'GET',
-              url: this.__rpUrl || '',
-              status: status || undefined,
-              error: status === 0 ? 'network_error' : undefined,
-              durationMs: this.__rpStart ? Math.round(performance.now() - this.__rpStart) : undefined,
-              ts: new Date().toISOString(),
-            });
-          }
-        });
         return originalSend.apply(this, args);
       };
+
+      XMLHttpRequest.prototype.open = wrappedOpen;
+      XMLHttpRequest.prototype.send = wrappedSend;
     }
   }
 
   function stop() {
     if (!active) return;
-    if (originalFetch) window.fetch = originalFetch;
-    if (originalOpen) XMLHttpRequest.prototype.open = originalOpen;
-    if (originalSend) XMLHttpRequest.prototype.send = originalSend;
+    if (wrappedFetch && window.fetch === wrappedFetch) window.fetch = originalFetch;
+    if (wrappedOpen && XMLHttpRequest.prototype.open === wrappedOpen) {
+      XMLHttpRequest.prototype.open = originalOpen;
+    }
+    if (wrappedSend && XMLHttpRequest.prototype.send === wrappedSend) {
+      XMLHttpRequest.prototype.send = originalSend;
+    }
     originalFetch = null;
+    wrappedFetch = null;
     originalOpen = null;
     originalSend = null;
+    wrappedOpen = null;
+    wrappedSend = null;
     active = false;
   }
 

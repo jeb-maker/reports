@@ -5,19 +5,27 @@
   "type": "module",
   "main": "./dist/reports.umd.cjs",
   "module": "./dist/reports.esm.js",
-  "browser": "./dist/reports.min.js",
   "unpkg": "./dist/reports.min.js",
   "jsdelivr": "./dist/reports.min.js",
   "exports": {
     ".": {
       "import": "./dist/reports.esm.js",
-      "require": "./dist/reports.umd.cjs"
+      "require": "./dist/reports.umd.cjs",
+      "default": "./dist/reports.esm.js"
     }
+  },
+  "sideEffects": [
+    "./dist/reports.min.js",
+    "./src/index.js"
+  ],
+  "engines": {
+    "node": ">=18"
   },
   "files": [
     "dist",
     "examples",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "dev": "vite",

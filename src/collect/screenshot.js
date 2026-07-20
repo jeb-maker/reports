@@ -1,8 +1,9 @@
 /**
- * Screenshot: getDisplayMedia first, html2canvas fallback.
- * @param {{ maxBytes?: number, ignoreRoot?: Element | null }} options
+ * Screenshot: getDisplayMedia first, optional html2canvas if host provides it.
+ * Never loads third-party CDN scripts.
+ * @param {{ maxBytes?: number, ignoreRoot?: Element | null, html2canvas?: Function | null }} options
  */
-export async function captureScreenshot({ maxBytes = 400_000, ignoreRoot = null } = {}) {
+export async function captureScreenshot({ maxBytes = 400_000, ignoreRoot = null, html2canvas = null } = {}) {
   try {
     const fromDisplay = await captureViaDisplayMedia(maxBytes);
     if (fromDisplay) return fromDisplay;
@@ -12,11 +13,14 @@ export async function captureScreenshot({ maxBytes = 400_000, ignoreRoot = null 
     }
   }
 
-  try {
-    const fromDom = await captureViaHtml2Canvas({ maxBytes, ignoreRoot });
-    if (fromDom) return fromDom;
-  } catch (err) {
-    return { status: 'failed', error: err?.message || String(err) };
+  const h2c = html2canvas || (typeof window !== 'undefined' ? window.html2canvas : null);
+  if (h2c) {
+    try {
+      const fromDom = await captureViaHtml2Canvas(h2c, { maxBytes, ignoreRoot });
+      if (fromDom) return fromDom;
+    } catch (err) {
+      return { status: 'failed', error: err?.message || String(err) };
+    }
   }
 
   return { status: 'unavailable' };
@@ -34,14 +38,20 @@ async function captureViaDisplayMedia(maxBytes) {
     preferCurrentTab: true,
   });
 
+  const video = document.createElement('video');
   try {
     const track = stream.getVideoTracks()[0];
-    const video = document.createElement('video');
+    const surface = track.getSettings?.().displaySurface;
+    if (surface && surface !== 'browser' && surface !== 'tab') {
+      track.stop();
+      stream.getTracks().forEach((t) => t.stop());
+      return { status: 'denied_wrong_surface', error: surface };
+    }
+
     video.muted = true;
     video.playsInline = true;
     video.srcObject = stream;
     await video.play();
-
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     const canvas = document.createElement('canvas');
@@ -52,20 +62,27 @@ async function captureViaDisplayMedia(maxBytes) {
     track.stop();
     stream.getTracks().forEach((t) => t.stop());
 
-    return canvasToResult(canvas, maxBytes, 'display-media');
-  } catch (err) {
+    try {
+      return canvasToResult(canvas, maxBytes, 'display-media');
+    } catch (err) {
+      return { status: 'failed', error: err?.name === 'SecurityError' ? 'canvas_tainted' : err?.message };
+    }
+  } finally {
+    try {
+      video.pause();
+      video.srcObject = null;
+    } catch {
+      /* ignore */
+    }
     stream.getTracks().forEach((t) => t.stop());
-    throw err;
   }
 }
 
 /**
+ * @param {Function} html2canvas
  * @param {{ maxBytes: number, ignoreRoot?: Element | null }} options
  */
-async function captureViaHtml2Canvas({ maxBytes, ignoreRoot }) {
-  const html2canvas = await loadHtml2Canvas();
-  if (!html2canvas) return null;
-
+async function captureViaHtml2Canvas(html2canvas, { maxBytes, ignoreRoot }) {
   const canvas = await html2canvas(document.body, {
     useCORS: true,
     allowTaint: false,
@@ -76,16 +93,10 @@ async function captureViaHtml2Canvas({ maxBytes, ignoreRoot }) {
     },
   });
 
-  return canvasToResult(canvas, maxBytes, 'html2canvas');
-}
-
-async function loadHtml2Canvas() {
-  if (typeof window !== 'undefined' && window.html2canvas) return window.html2canvas;
   try {
-    const mod = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm');
-    return mod.default || mod;
-  } catch {
-    return null;
+    return canvasToResult(canvas, maxBytes, 'html2canvas');
+  } catch (err) {
+    return { status: 'failed', error: err?.name === 'SecurityError' ? 'canvas_tainted' : err?.message };
   }
 }
 
