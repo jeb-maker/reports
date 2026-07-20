@@ -33,6 +33,24 @@ Ou créez une **GitHub Release** : le workflow `.github/workflows/publish.yml` p
 
 ## Imports (minimal vs complet)
 
+### Recommandé — core + adapter en fonction
+
+```js
+import { Reports } from '@jeb-maker/reports/core';
+import { sendJira } from '@jeb-maker/reports/adapters/jira';
+
+Reports.init({
+  adapter: sendJira,
+  jira: {
+    auth: 'url',
+    url: '/api/feedback/jira',
+    projectKey: 'SUP',
+  },
+});
+```
+
+Même idée pour webhook, Slack, etc. : tu n’embarques que le cœur + l’adapter choisi.
+
 ### Complet (tous les adapters)
 
 ```js
@@ -44,33 +62,17 @@ Reports.init({
 });
 ```
 
-### Minimal (core + un seul adapter)
+### Optionnel — `registerAdapter` (noms dynamiques)
 
 ```js
 import { Reports, registerAdapter } from '@jeb-maker/reports/core';
 import { sendJira } from '@jeb-maker/reports/adapters/jira';
 
 registerAdapter('jira', sendJira);
-
-Reports.init({
-  adapter: 'jira',
-  jira: { auth: 'url', url: '/api/feedback/jira', projectKey: 'SUP' },
-});
+Reports.init({ adapter: 'jira', jira: { /* … */ } });
 ```
 
-Ou sans registre, en passant la fonction directement :
-
-```js
-import { Reports } from '@jeb-maker/reports/core';
-import { sendWebhook } from '@jeb-maker/reports/adapters/webhook';
-
-Reports.init({
-  adapter: sendWebhook,
-  webhook: { url: '/api/feedback', credentials: 'same-origin' },
-});
-```
-
-Sous-chemins disponibles : `./core`, `./adapters/webhook`, `./adapters/slack`, `./adapters/github`, `./adapters/jira`, `./adapters/redmine`, `./adapters/gitlab`, `./adapters/linear`, `./adapters/azure-devops`.
+Sous-chemins : `./core`, `./adapters/webhook`, `./adapters/slack`, `./adapters/github`, `./adapters/jira`, `./adapters/redmine`, `./adapters/gitlab`, `./adapters/linear`, `./adapters/azure-devops`.
 
 ### Script tag (bundle complet)
 

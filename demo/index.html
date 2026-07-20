@@ -86,11 +86,12 @@
       </div>
     </main>
     <script type="module">
-      import { Reports } from '../src/index.js';
-      // Minimal alternative:
-      // import { Reports, registerAdapter } from '../src/core.js';
+      // Recommended minimal import:
+      // import { Reports } from '../src/core.js';
       // import { sendWebhook } from '../src/adapters/webhook.js';
-      // registerAdapter('webhook', sendWebhook);
+      // Reports.init({ adapter: sendWebhook, webhook: { url: '…' } });
+      import { Reports } from '../src/index.js';
+
 
       console.info('Demo Reports prête');
       console.warn('Exemple avertissement capturé');
