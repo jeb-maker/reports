@@ -1,6 +1,6 @@
 {
   "name": "@jeb-maker/reports",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Plugin JavaScript de signalement utilisateur — capture riche, adapters trackers, auth à charge de l'app hôte",
   "type": "module",
   "main": "./dist/reports.umd.cjs",
