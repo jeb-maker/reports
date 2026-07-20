@@ -18,8 +18,6 @@ Le package est publié sur le registre npm GitHub (`npm.pkg.github.com`) sous `@
 //npm.pkg.github.com/:_authToken=VOTRE_TOKEN
 ```
 
-Ou via variable d’environnement : `NODE_AUTH_TOKEN` / `npm login --registry=https://npm.pkg.github.com`.
-
 ```bash
 npm install @jeb-maker/reports
 ```
@@ -27,31 +25,56 @@ npm install @jeb-maker/reports
 ### Publier (mainteneurs)
 
 ```bash
-# local (token avec write:packages)
-echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> ~/.npmrc
 npm run build
 npm publish
 ```
 
 Ou créez une **GitHub Release** : le workflow `.github/workflows/publish.yml` publie automatiquement.
 
-### Usage
+## Imports (minimal vs complet)
+
+### Recommandé — core + adapter en fonction
 
 ```js
-import { Reports } from '@jeb-maker/reports';
-// ou: import Reports from '@jeb-maker/reports';
+import { Reports } from '@jeb-maker/reports/core';
+import { sendJira } from '@jeb-maker/reports/adapters/jira';
 
 Reports.init({
-  adapter: 'webhook',
-  webhook: {
-    url: '/api/feedback',
-    credentials: 'same-origin', // cookies same-origin ; 'include' seulement si vous le voulez explicitement
+  adapter: sendJira,
+  jira: {
+    auth: 'url',
+    url: '/api/feedback/jira',
+    projectKey: 'SUP',
   },
-  metadata: () => ({ userId: window.currentUser?.id, appVersion: '1.2.0' }),
 });
 ```
 
-Script tag (après `npm run build`) :
+Même idée pour webhook, Slack, etc. : tu n’embarques que le cœur + l’adapter choisi.
+
+### Complet (tous les adapters)
+
+```js
+import { Reports } from '@jeb-maker/reports';
+
+Reports.init({
+  adapter: 'jira',
+  jira: { auth: 'url', url: '/api/feedback/jira', projectKey: 'SUP' },
+});
+```
+
+### Optionnel — `registerAdapter` (noms dynamiques)
+
+```js
+import { Reports, registerAdapter } from '@jeb-maker/reports/core';
+import { sendJira } from '@jeb-maker/reports/adapters/jira';
+
+registerAdapter('jira', sendJira);
+Reports.init({ adapter: 'jira', jira: { /* … */ } });
+```
+
+Sous-chemins : `./core`, `./adapters/webhook`, `./adapters/slack`, `./adapters/github`, `./adapters/jira`, `./adapters/redmine`, `./adapters/gitlab`, `./adapters/linear`, `./adapters/azure-devops`.
+
+### Script tag (bundle complet)
 
 ```html
 <script src="./dist/reports.min.js"></script>

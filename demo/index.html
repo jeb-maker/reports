@@ -86,7 +86,12 @@
       </div>
     </main>
     <script type="module">
+      // Recommended minimal import:
+      // import { Reports } from '../src/core.js';
+      // import { sendWebhook } from '../src/adapters/webhook.js';
+      // Reports.init({ adapter: sendWebhook, webhook: { url: '…' } });
       import { Reports } from '../src/index.js';
+
 
       console.info('Demo Reports prête');
       console.warn('Exemple avertissement capturé');
