@@ -75,7 +75,11 @@
     "build": "vite build && vite build --config vite.iife.config.js",
     "preview": "vite preview",
     "demo": "vite --open /demo/index.html",
-    "prepublishOnly": "npm run build",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run lint && npm run test && npm run build",
+    "prepublishOnly": "npm run check",
     "publish:github": "npm publish"
   },
   "keywords": [
@@ -94,6 +98,12 @@
     "url": "git+https://github.com/jeb-maker/reports.git"
   },
   "devDependencies": {
-    "vite": "^6.3.5"
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "vite": "^6.3.5",
+    "vitest": "^4.1.10"
   }
 }
