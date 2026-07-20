@@ -150,7 +150,25 @@ Reports.init({
 
 ## Rapport (`schemaVersion: 1`)
 
-Page (URL redactée), navigateur, viewport, timing, console, erreurs, réseau (échecs), screenshot, metadata, `actions: []` (réservé post-V1).
+Page (URL redactée), navigateur, viewport, timing, console, erreurs, réseau (échecs), screenshot, metadata, `trigger` (`manual` ou `auto:error`), `actions: []` (réservé post-V1).
+
+## Envoi automatique des erreurs JS (opt-in)
+
+Désactivé par défaut. Quand activé, chaque erreur JS non interceptée (`error` / `unhandledrejection`) déclenche un rapport complet — même contexte que le formulaire, mais **jamais de screenshot** (pas de consentement utilisateur au moment de l'erreur).
+
+```js
+Reports.init({
+  adapter: 'webhook',
+  webhook: { url: '/api/feedback' },
+  autoReport: {
+    errors: true,        // activer
+    maxPerSession: 5,    // plafond par session de page (défaut 5)
+    cooldownMs: 30_000,  // délai minimum entre deux envois (défaut 30 s)
+  },
+});
+```
+
+Garde-fous intégrés : déduplication par signature d'erreur (une même erreur n'est envoyée qu'une fois), cooldown entre envois, plafond par session, et l'échec de l'envoi lui-même ne peut jamais re-déclencher le reporter (pas de boucle). Les rapports automatiques portent `trigger: 'auto:error'` et `title` préfixé `[auto]`.
 
 ## CORS
 
