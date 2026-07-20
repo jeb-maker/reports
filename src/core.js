@@ -6,6 +6,7 @@ import {
   createNetworkCapture,
   captureScreenshot,
 } from './collect/index.js';
+import { createAutoReporter } from './collect/auto-report.js';
 import { resolveI18n } from './i18n/fr.js';
 import { createUi } from './ui/widget.js';
 import { dispatch, registerAdapter, getAdapter, listAdapters } from './adapters/registry.js';
@@ -67,18 +68,44 @@ export function init(config = {}) {
     onSubmit: (form) => submitReport(form, cfg, { consoleCap, errorCap, networkCap, ui, epoch: myEpoch }),
   });
 
+  let autoReporter = null;
+  if (cfg.autoReport?.errors === true) {
+    autoReporter = createAutoReporter({
+      maxPerSession: cfg.autoReport.maxPerSession,
+      cooldownMs: cfg.autoReport.cooldownMs,
+      submit: (err) =>
+        submitReport(
+          {
+            type: 'bug',
+            title: `[auto] ${err.message}`,
+            message: err.stack ? `${err.message}\n\n${err.stack}` : err.message,
+            consentScreenshot: false,
+            trigger: 'auto:error',
+          },
+          // Never attempt a screenshot on auto-reports: there is no user
+          // consent at error time and getDisplayMedia would prompt.
+          { ...cfg, screenshot: { ...(cfg.screenshot || {}), enabled: false } },
+          { consoleCap, errorCap, networkCap, ui, epoch: myEpoch },
+        ),
+    });
+  }
+
   if (state) {
     state.consoleCap.stop();
     state.errorCap.stop();
     state.networkCap.stop();
+    state.autoReporter?.stop();
     state.ui.destroy();
   }
 
   if (cfg.consoleCapture !== false) consoleCap.start();
   if (cfg.errorCapture !== false) errorCap.start();
   if (cfg.networkCapture !== false) networkCap.start();
+  // Start after errorCap so the triggering error is already buffered
+  // when the auto-report snapshot is taken.
+  autoReporter?.start();
 
-  state = { cfg, ui, consoleCap, errorCap, networkCap, epoch: myEpoch };
+  state = { cfg, ui, consoleCap, errorCap, networkCap, autoReporter, epoch: myEpoch };
   ui.mount();
   return Reports;
 }
@@ -151,6 +178,7 @@ export function destroy(opts = {}) {
   state.consoleCap.stop();
   state.errorCap.stop();
   state.networkCap.stop();
+  state.autoReporter?.stop();
   state.ui.destroy();
   if (opts.clearAuth) clearToken();
   state = null;
@@ -204,6 +232,7 @@ async function submitReport(form, cfg, caps) {
     id,
     createdAt: new Date().toISOString(),
     type: form.type || 'bug',
+    trigger: typeof form.trigger === 'string' ? form.trigger : 'manual',
     title: redactString(form.title || '', 500),
     message: redactString(form.message || '', 5000),
     email: form.email ? String(form.email).trim() : undefined,
