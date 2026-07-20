@@ -7,7 +7,8 @@
 let memoryToken = null;
 
 function base64UrlEncode(buffer) {
-  const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
+  // ArrayBuffer.isView is realm-safe, unlike `instanceof ArrayBuffer`.
+  const bytes = ArrayBuffer.isView(buffer) ? buffer : new Uint8Array(buffer);
   let str = '';
   for (const b of bytes) str += String.fromCharCode(b);
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
