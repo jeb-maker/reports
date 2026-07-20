@@ -163,6 +163,18 @@ npm install
 npm run demo
 ```
 
+## Développement
+
+```bash
+npm run lint        # ESLint
+npm test            # Vitest (jsdom)
+npm run test:watch  # Tests en continu
+npm run build       # Bundles ESM + IIFE/UMD
+npm run check       # lint + test + build (exécuté aussi avant publish)
+```
+
+La CI (`.github/workflows/ci.yml`) exécute lint, tests et build sur chaque push / PR.
+
 ## Checklist
 
 1. Pas de secret dans le JS public  

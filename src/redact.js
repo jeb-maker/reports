@@ -65,7 +65,8 @@ export function redactUrl(url) {
       }
       if (changed) u.hash = hashParams.toString();
     }
-    return u.toString();
+    // Second pass: catch secrets embedded in path segments or unusual spots.
+    return redactString(u.toString(), 2000);
   } catch {
     return redactString(url, 500);
   }

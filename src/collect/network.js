@@ -28,7 +28,7 @@ export function createNetworkCapture({ size = 40 } = {}) {
       originalFetch = window.fetch;
       wrappedFetch = async function reportsFetch(input, init = {}) {
         const method = (init.method || (typeof input === 'object' && input && input.method) || 'GET').toUpperCase();
-        let rawUrl = '';
+        let rawUrl;
         if (typeof input === 'string') rawUrl = input;
         else if (input && typeof input === 'object' && typeof input.url === 'string') rawUrl = input.url;
         else rawUrl = String(input);

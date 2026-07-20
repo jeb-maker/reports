@@ -172,7 +172,7 @@ async function submitReport(form, cfg, caps) {
   const startedEpoch = caps.epoch;
   const isStale = () => !state || state.epoch !== startedEpoch;
 
-  let metadata = {};
+  let metadata;
   try {
     const metaPromise =
       typeof cfg.metadata === 'function' ? Promise.resolve(cfg.metadata()) : Promise.resolve(cfg.metadata || {});
